@@ -25,7 +25,7 @@ std::string hasData(std::string s) {
   return "";
 }
 
-int main()
+int main(int argc, char* argv[])
 {
   uWS::Hub h;
 
@@ -34,6 +34,37 @@ int main()
   
   double target_x = 0.0;
   double target_y = 0.0;
+  if(argc != 15) {
+        cout << "usage: px, py, v, psi, psid, P1, P2, P3, P4, P5, std_a, std_yawdd, active_sensor, circle_updt_f" << endl;
+        return 1;
+  }
+  ukf.x_(0) = atof(argv[1]);
+  ukf.x_(1)  = atof(argv[2]);
+  ukf.x_(2) = atof(argv[3]);
+  ukf.x_(3) = atof(argv[4]);
+  ukf.x_(4) = atof(argv[5]);
+  ukf.P_(0,0) = atof(argv[6]);
+  ukf.P_(1,1) = atof(argv[7]);
+  ukf.P_(2,2) = atof(argv[8]);
+  ukf.P_(3,3) = atof(argv[9]);
+  ukf.P_(4,4) = atof(argv[10]);
+  ukf.std_a_ = atof(argv[11]);;
+  ukf.std_yawdd_ = atof(argv[12]);
+  std::string active_sensor = argv[13];
+  if (!active_sensor.compare("radar")) {
+	  ukf.use_laser_ = false;
+	  ukf.use_radar_ = true;
+  }
+  if (!active_sensor.compare("laser")) {
+	  ukf.use_laser_ = true;
+	  ukf.use_radar_ = false;
+  }
+  if (!active_sensor.compare("both")) {
+	  ukf.use_radar_ = true;
+	  ukf.use_laser_ = true;
+  }
+  ukf.circle_updt_f_ = atof(argv[14]);
+
 
   h.onMessage([&ukf,&target_x,&target_y](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
