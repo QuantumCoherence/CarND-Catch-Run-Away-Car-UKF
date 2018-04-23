@@ -35,17 +35,17 @@ UKF::UKF() {
 
 	// initial covariance matrix
 	P_ = MatrixXd(n_x_, n_x_);
-	P_ << 1, 0, 0, 0, 0,
-		  0, 1, 0, 0, 0,
-		  0, 0, 1, 0, 0,
-		  0, 0, 0, 1, 0,
-		  0, 0, 0, 0, 1;
+	P_ << 0.2, 0, 0, 0, 0,
+		  0, 0.2, 0, 0, 0,
+		  0, 0, 0.2, 0, 0,
+		  0, 0, 0, 3, 0,
+		  0, 0, 0, 0, 3;
 
 	// Process noise standard deviation longitudinal acceleration in m/s^2
-	std_a_ = 0.030;
+	std_a_ = 0.40;
 
 	// Process noise standard deviation yaw acceleration in rad/s^2
-	std_yawdd_ = 0.030;
+	std_yawdd_ = 0.40;
 
 	//DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
 	// Laser measurement noise standard deviation position1 in m
@@ -66,7 +66,6 @@ UKF::UKF() {
 
 	// Create Sigma Point Matrix
 	Xsig = MatrixXd(n_x_, 2 * n_x_ + 1);
-
 
 	//create augmented mean vector
 	x_aug = VectorXd(n_aug_);
@@ -125,10 +124,28 @@ UKF::UKF() {
 	  lambda_fx_aug = sqrt(lambda_+n_aug_);
 	  A_aug = MatrixXd(n_aug_,n_aug_);
 	  circle_updt_f_ = 20;
-	  circle_ =  MatrixXd(2,100);
-	  r_ = -1;
+	  c_ =  MatrixXd(2,1000);
+	  mean_depth = 10;
+	  Cx_buff = VectorXd(mean_depth);
+	  Cy_buff = VectorXd(mean_depth);
+	  r_buff  = VectorXd(mean_depth);
+	  Cx_buff.fill(0);
+	  Cy_buff.fill(0);
+	  r_buff.fill(0);
 	  Cx_ = 0;
 	  Cy_ = 0;
+	  r_ = -1;
+	  A = MatrixXd(3,3);
+	  A.fill(0);
+	  B = MatrixXd(3,3);
+	  B.fill(0);
+	  C = MatrixXd(3,3);
+	  C.fill(0);
+	  D = MatrixXd(3,3);
+	  D.fill(0);
+
+	  count = 0;
+
 }
 
 UKF::~UKF() {}
@@ -173,7 +190,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 		//cout << "Lidar " << meas_package.raw_measurements_ << endl;
 		UpdateLidar(meas_package);
 	}
-
+	EstimateCircle();
 }
 
 /**
@@ -435,56 +452,77 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 	nis_  = Z_err.transpose() * S_rdr_.inverse() * Z_err;
 
 }
-void UKF::UpdateCircle() {
+
+
+void UKF::EstimateCircle() {
 	static double psi;
 	static int count = 0;
 	static int pts_cnt = 0;
 	static int init = 0;
+	static int pt1_idx = 0;
 	static int pt2_idx = 0;
 	static int pt3_idx = 0;
+	static int mean_idx = 0;
+	static double prev_Cx_avg = 0;
+	static double prev_Cy_avg = 0;
+	static double prev_r_avg  = 0;
+	static int meantcnt = 0;
 
-	MatrixXd A, B, C, D = MatrixXd(3,3);
+
 	double px1, py1, px2, py2, px3, py3;
 	double detA, detB, detC, detD;
-
 	count = (count + 1) % circle_updt_f_;
 	if (!count){
 		c_(0,pts_cnt)= x_(0);
 		c_(1,pts_cnt)= x_(1);
-		pts_cnt++;
+		pts_cnt = (pts_cnt+1)%1000;
 		if (init >= 2){
-			pt3_idx=pts_cnt;
-			if(pts_cnt%2 ==0){
-				pt2_idx++;
+			if (pt3_idx - pt2_idx < 250){
+				pt3_idx=pts_cnt-1;
+				if((pts_cnt-1)%2 ==0){
+					pt2_idx++;
+				}
+			} else {
+				pt1_idx = (pt1_idx+1)%1000;
+				pt2_idx = (pt2_idx+1)%1000;
+				pt3_idx = (pt3_idx+1)%1000;
 			}
-			A << c_(0,0)                                                , c_(1,0)      , 1,
+			A << c_(0,pt1_idx)                                          , c_(1,pt1_idx), 1,
 				 c_(0,pt2_idx)                                          , c_(1,pt2_idx), 1,
 				 c_(0,pt3_idx)                                          , c_(1,pt3_idx), 1;
-			B << c_(0,0)*c_(0,0)+c_(1,0)*c_(1,0)                        , c_(1,0)      , 1,
+			B << c_(0,pt1_idx)*c_(0,pt1_idx)+c_(1,pt1_idx)*c_(1,pt1_idx), c_(1,pt1_idx), 1,
 				 c_(0,pt2_idx)*c_(0,pt2_idx)+c_(1,pt2_idx)*c_(1,pt2_idx), c_(1,pt2_idx), 1,
 				 c_(0,pt3_idx)*c_(0,pt3_idx)+c_(1,pt3_idx)*c_(1,pt3_idx), c_(1,pt3_idx), 1;
-			C << c_(0,0)*c_(0,0)+c_(0,1)*c_(0,1)                        , c_(0,0)      , 1,
+			C << c_(0,pt1_idx)*c_(0,pt1_idx)+c_(1,pt1_idx)*c_(1,pt1_idx), c_(0,pt1_idx), 1,
 				 c_(0,pt2_idx)*c_(0,pt2_idx)+c_(1,pt2_idx)*c_(1,pt2_idx), c_(0,pt2_idx), 1,
 				 c_(0,pt3_idx)*c_(0,pt3_idx)+c_(1,pt3_idx)*c_(1,pt3_idx), c_(0,pt3_idx), 1;
-			D << c_(0,0)*c_(0,0)+c_(0,1)*c_(0,1)                        , c_(0,0)      , c_(1, 0),
+			D << c_(0,pt1_idx)*c_(0,pt1_idx)+c_(1,pt1_idx)*c_(1,pt1_idx), c_(0,pt1_idx), c_(1,pt1_idx),
 				 c_(0,pt2_idx)*c_(0,pt2_idx)+c_(1,pt2_idx)*c_(1,pt2_idx), c_(0,pt2_idx), c_(1,pt2_idx),
 				 c_(0,pt3_idx)*c_(0,pt3_idx)+c_(1,pt3_idx)*c_(1,pt3_idx), c_(0,pt3_idx), c_(1,pt3_idx);
 			detA = A.determinant();
 			detB = -1 * B.determinant();
 			detC = C.determinant();
 			detD = -1 * D.determinant();
-			Cx_ = -detB/(2*detA);
-			Cy_ = -detC/(2*detA);
-			r_ = sqrt((detB*detB+ detC*detC - 4*detA*detD)/(4*detA*detA));
+
+			Cx_buff(mean_idx) = -detB/(2*detA);
+			Cx_ = Cx_buff.mean(); //not very efficient ...
+
+			Cy_buff(mean_idx) = -detC/(2*detA);
+			Cy_ = Cy_buff.mean();//not very efficient ...
+
+			r_buff(mean_idx) = sqrt((detB*detB+ detC*detC - 4*detA*detD)/(4*detA*detA));
+			r_ = r_buff.mean();//not very efficient ...
+			//cout << r_ << " " <<  r_buff  << endl;
+			mean_idx = (mean_idx+1)% mean_depth;
 
 		} else {
-			pt2_idx = init;
 			init++;
 			r_ = -1;
 		}
 	} else {
-		r_ = -1;
+		//r_ = -1;
 	}
+	int j = 0;
 	return;
 }
 

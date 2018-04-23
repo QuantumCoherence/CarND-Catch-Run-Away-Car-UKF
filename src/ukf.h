@@ -86,10 +86,11 @@ public:
   MatrixXd S_ldr_;
 
   double nis_;
-  double Cx_, Cy_, r_;
+  double Cx_;
+  double Cy_;
+  double r_;
   int circle_updt_f_;
   MatrixXd c_;
-
   /**
    * Constructor
    */
@@ -126,8 +127,12 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
-  void UpdateCircle();
+  /**
+   * Estimate radius and center of the target vehicle
+   */
 
+  void EstimateCircle();
+  int count;
 
 private:
 
@@ -168,6 +173,17 @@ private:
   MatrixXd A_aug;
   // lambda factor
   double lambda_fx_aug;
+  MatrixXd A;
+  MatrixXd B;
+  MatrixXd C;
+  MatrixXd D;
+  int mean_depth;
+  VectorXd Cx_buff;
+  VectorXd Cy_buff;
+  VectorXd r_buff;
+
+
+
 
 };
 

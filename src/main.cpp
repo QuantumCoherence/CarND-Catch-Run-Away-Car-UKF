@@ -6,6 +6,8 @@
 
 using namespace std;
 
+
+
 // for convenience
 using json = nlohmann::json;
 
@@ -25,51 +27,74 @@ std::string hasData(std::string s) {
   return "";
 }
 
-int main(int argc, char* argv[])
+const int TIGHTERCURVE   =  0;
+const int ESTIMATECIRCLE  = 1;
+const int WAITFORVEHICLE  = 2;
+const int APPROACHCIRCLE  = 3;
+const int CATCHVEHICLE    = 4;
+const int GOBACKHOME      = 5;
+const int CROSSOVERCIRCLE = 6;
+const int FINDCROSSOVER   = 7;
+const int FOLLOW          = 8;
+
+
+std::string prt_lablel(int state){
+
+	switch(state){
+	case TIGHTERCURVE:
+		return "TIGHTERCURVE";
+		break;
+	case ESTIMATECIRCLE:
+		return "ESTIMATECIRCLE";
+		break;
+	case WAITFORVEHICLE:
+		return "WAITFORVEHICLE";
+		break;
+	case APPROACHCIRCLE:
+		return "APPROACHCIRCLE";
+		break;
+	case CATCHVEHICLE:
+		return "CATCHVEHICLE";
+		break;
+	case GOBACKHOME:
+		return "GOBACKHOME";
+		break;
+	case CROSSOVERCIRCLE:
+		return "CROSSOVERCIRCLE";
+		break;
+	case FINDCROSSOVER:
+		return "FINDCROSSOVER";
+		break;
+	case FOLLOW:
+		return "FOLLOW";
+		break;
+	default:
+		return "NONE";
+		break;
+
+	}
+}
+
+
+int main()
 {
   uWS::Hub h;
 
   // Create a UKF instance
   UKF ukf;
-  
+
   double target_x = 0.0;
   double target_y = 0.0;
-  if(argc != 15) {
-        cout << "usage: px, py, v, psi, psid, P1, P2, P3, P4, P5, std_a, std_yawdd, active_sensor, circle_updt_f" << endl;
-        return 1;
-  }
-  ukf.x_(0) = atof(argv[1]);
-  ukf.x_(1)  = atof(argv[2]);
-  ukf.x_(2) = atof(argv[3]);
-  ukf.x_(3) = atof(argv[4]);
-  ukf.x_(4) = atof(argv[5]);
-  ukf.P_(0,0) = atof(argv[6]);
-  ukf.P_(1,1) = atof(argv[7]);
-  ukf.P_(2,2) = atof(argv[8]);
-  ukf.P_(3,3) = atof(argv[9]);
-  ukf.P_(4,4) = atof(argv[10]);
-  ukf.std_a_ = atof(argv[11]);;
-  ukf.std_yawdd_ = atof(argv[12]);
-  std::string active_sensor = argv[13];
-  if (!active_sensor.compare("radar")) {
-	  ukf.use_laser_ = false;
-	  ukf.use_radar_ = true;
-  }
-  if (!active_sensor.compare("laser")) {
-	  ukf.use_laser_ = true;
-	  ukf.use_radar_ = false;
-  }
-  if (!active_sensor.compare("both")) {
-	  ukf.use_radar_ = true;
-	  ukf.use_laser_ = true;
-  }
-  ukf.circle_updt_f_ = atof(argv[14]);
-
-
+  static int state = TIGHTERCURVE;
+  static int reversal_cnt = 0;
   h.onMessage([&ukf,&target_x,&target_y](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
+	  double distance_difference = 0;
+	  double heading_difference = 0;
+	  double heading_to_target = 0;
+	  double prev_distance = 0;
 
     if (length && length > 2 && data[0] == '4' && data[1] == '2')
     {
@@ -80,7 +105,6 @@ int main(int argc, char* argv[])
       	
         auto j = json::parse(s);
         std::string event = j[0].get<std::string>();
-        
         if (event == "telemetry") {
           // j[1] is the data JSON object
 
@@ -136,26 +160,143 @@ int main(int argc, char* argv[])
           
     	  ukf.ProcessMeasurement(meas_package_R);
 
-	  target_x = ukf.x_[0];
-	  target_y = ukf.x_[1];
+		  json msgJson;
 
-    	  double heading_to_target = atan2(target_y - hunter_y, target_x - hunter_x);
-    	  while (heading_to_target > M_PI) heading_to_target-=2.*M_PI; 
-    	  while (heading_to_target <-M_PI) heading_to_target+=2.*M_PI;
-    	  //turn towards the target
-    	  double heading_difference = heading_to_target - hunter_heading;
-    	  while (heading_difference > M_PI) heading_difference-=2.*M_PI; 
-    	  while (heading_difference <-M_PI) heading_difference+=2.*M_PI;
 
-    	  double distance_difference = sqrt((target_y - hunter_y)*(target_y - hunter_y) + (target_x - hunter_x)*(target_x - hunter_x));
 
-          json msgJson;
-          msgJson["turn"] = heading_difference;
-          msgJson["dist"] = distance_difference; 
-          auto msg = "42[\"move_hunter\"," + msgJson.dump() + "]";
-          // std::cout << msg << std::endl;
-          ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-	  
+		  switch( state)
+					{ case TIGHTERCURVE:{
+							  target_x = ukf.x_[0] + ukf.x_[2] * cos(1.0001*ukf.x_[3]);
+							  target_y = ukf.x_[1] + ukf.x_[2] * sin(1.0001*ukf.x_[3]);
+
+
+							  double heading_to_target = atan2(target_y - hunter_y, target_x - hunter_x);
+							  while (heading_to_target > M_PI) heading_to_target-=2.*M_PI;
+							  while (heading_to_target <-M_PI) heading_to_target+=2.*M_PI;
+							  //turn towards the target
+							  double heading_difference = heading_to_target - hunter_heading;
+							  while (heading_difference > M_PI) heading_difference-=2.*M_PI;
+							  while (heading_difference <-M_PI) heading_difference+=2.*M_PI;
+							  double distance_difference = sqrt((target_y - hunter_y)*(target_y - hunter_y) + (target_x - hunter_x)*(target_x - hunter_x));
+							  ukf.count = (ukf.count+1)%5;
+							  if (ukf.count){
+								  msgJson["turn"] = heading_difference;
+								  msgJson["dist"] = distance_difference;
+							  } else {
+								  msgJson["turn"] = 0;
+								  msgJson["dist"] = 0;
+							  }
+					    }
+						break;
+					  case ESTIMATECIRCLE:{
+								if(ukf.r_ > 6 && ukf.r_ < 8 ){ state = ESTIMATECIRCLE;}
+								  msgJson["turn"] = 0;
+								  msgJson["dist"] = 0;
+					  	   }
+						   break;
+					  case WAITFORVEHICLE:{
+								if ( (ukf.x_(0) < ukf.Cx_+ ukf.r_*cos(2*M_PI/3)) && (ukf.x_(1) > ukf.Cy_ + ukf.r_ * sin(2*M_PI/3))){
+								   state = APPROACHCIRCLE;
+								}
+								msgJson["turn"] = 0;
+								msgJson["dist"] = 0;
+					        }
+						   break;
+					  case FINDCROSSOVER:{
+							target_x = 2*ukf.Cx_ - ukf.x_(0);
+							target_y = 2*ukf.Cy_ - ukf.x_(1);
+							msgJson["turn"] = 0;
+							msgJson["dist"] = 0;
+							state = CROSSOVERCIRCLE;
+						   }
+						   break;
+					  case CROSSOVERCIRCLE:{
+								heading_to_target = atan2(target_y - hunter_y, target_x - hunter_x);
+								while (heading_to_target > M_PI) heading_to_target-=2.*M_PI;
+								while (heading_to_target <-M_PI) heading_to_target+=2.*M_PI;
+								//turn towards the target
+								heading_difference = heading_to_target - hunter_heading;
+								while (heading_difference > M_PI) heading_difference-=2.*M_PI;
+								while (heading_difference <-M_PI) heading_difference+=2.*M_PI;
+								distance_difference = sqrt((target_y - hunter_y)*(target_y - hunter_y) + (target_x - hunter_x)*(target_x - hunter_x));
+								if(distance_difference < 0.05) {
+								 state = CATCHVEHICLE;
+								  msgJson["turn"] = 0;
+								  msgJson["dist"] = 0;
+								} else {
+								  msgJson["turn"] = heading_difference;
+								  msgJson["dist"] = distance_difference;
+								}
+					  	   }
+						   break;
+					  case APPROACHCIRCLE:{
+								target_x = ukf.Cx_ - ukf.r_;
+								target_y = ukf.Cy_;
+								heading_to_target = atan2(target_y - hunter_y, target_x - hunter_x);
+								while (heading_to_target > M_PI) heading_to_target-=2.*M_PI;
+								while (heading_to_target <-M_PI) heading_to_target+=2.*M_PI;
+								//turn towards the target
+								heading_difference = heading_to_target - hunter_heading;
+								while (heading_difference > M_PI) heading_difference-=2.*M_PI;
+								while (heading_difference <-M_PI) heading_difference+=2.*M_PI;
+								distance_difference = sqrt((target_y - hunter_y)*(target_y - hunter_y) + (target_x - hunter_x)*(target_x - hunter_x));
+								if(distance_difference < 0.05) {
+								 state = CATCHVEHICLE;
+								  msgJson["turn"] = 0;
+								  msgJson["dist"] = 0;
+								} else {
+								  msgJson["turn"] = heading_difference;
+								  msgJson["dist"] = distance_difference;
+								}
+        				   }
+						   break;
+					   case CATCHVEHICLE:{
+								prev_distance = distance_difference;
+								target_x = ukf.x_(0);
+								target_y = ukf.x_(1);
+
+								distance_difference = sqrt((target_y - hunter_y)*(target_y - hunter_y) + (target_x - hunter_x)*(target_x - hunter_x));
+								if (reversal_cnt < 5 ){
+									if (distance_difference > prev_distance) {reversal_cnt++;} else {reversal_cnt =0;}
+
+									msgJson["turn"] = 0;
+									msgJson["dist"] = 0;
+								} else {
+									msgJson["turn"] = 0;
+									msgJson["dist"] = 0;
+									state = FINDCROSSOVER;
+									reversal_cnt = 0;
+								}
+					        }
+						   break;
+					   case GOBACKHOME:{
+								target_x = 0;
+								target_y = 0;
+								heading_to_target = atan2(target_y - hunter_y, target_x - hunter_x);
+								while (heading_to_target > M_PI) heading_to_target-=2.*M_PI;
+								while (heading_to_target <-M_PI) heading_to_target+=2.*M_PI;
+								//turn towards the target
+								heading_difference = heading_to_target - hunter_heading;
+								while (heading_difference > M_PI) heading_difference-=2.*M_PI;
+								while (heading_difference <-M_PI) heading_difference+=2.*M_PI;
+								distance_difference = sqrt((target_y - hunter_y)*(target_y - hunter_y) + (target_x - hunter_x)*(target_x - hunter_x));
+								if(distance_difference < 0.05) {
+								 state = FINDCROSSOVER;
+								  msgJson["turn"] = 0;
+								  msgJson["dist"] = 0;
+								} else {
+								  msgJson["turn"] = heading_difference;
+								  msgJson["dist"] = distance_difference;
+								}
+					       }
+						   break;
+					   default:{
+						   	   state = GOBACKHOME;
+					       }
+						   break;
+					}
+		  auto msg = "42[\"move_hunter\"," + msgJson.dump() + "]";
+		  ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
         // Manual driving
@@ -202,90 +343,3 @@ int main(int argc, char* argv[])
   }
   h.run();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
