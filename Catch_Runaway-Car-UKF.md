@@ -34,10 +34,10 @@ The follwing equation tells the chasing vehicle to follow the position of the ru
 > target_x = ukf.x_(0);
 > target_y = ukf.y_(0);
 
-The future posistion of the robot car at time (now + dt) is given by its current position plus the longitudinal speed v multiplied by the the time. In x and y coordinates, this means multiplying the speed vector by the cos/sin of the angular direction of the speed vector, which give us the opportunty to make the turn tighter than the runaway vehicle.
+The future position of the robot car at time (now + dt) is given by its current position plus the longitudinal speed v multiplied by the the time. In x and y coordinates, this means multiplying the speed vector by the cos/sin of the angular direction of the speed vector, which gives us the opportunty to make the turn tighter than the runaway vehicle.
 
-We chose dt = 1 to start with. 
-To make the turn tighter we chose to multiply the angular direction of the runaway car, by a small factor dpsi = 1.01. 
+dt is set to 1 as a initial value. 
+To make the turn tighter it is suffcient to multiply the angular direction of the runaway car by a small factor dpsi = 1.01. 
 
 The following equations tell the chasing vehicle to aim at a position slightly on the left of the expected position of the runaway car. 
 
@@ -46,6 +46,7 @@ The following equations tell the chasing vehicle to aim at a position slightly o
 
 As the chasing vehicle turns tigther, its trajctory will turn left of the runaway car and cross into its path. 
 As the relative positon will now be in front of the runaway car, the distance to the target will decrease , slowing down the chasing vehicle just enough to be in front of the runaway car, which will catch up to the chasing vehicle, getting caught. Trial and error with the dt and dpsi, lead to a final value of dpsi = 1.0001 with unchanged dt at dt=1; 
+
 
 *State Machine an other strategies *
 
