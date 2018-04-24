@@ -42,6 +42,7 @@ To make the turn tighter it is suffcient to multiply the angular direction of th
 The following equations tell the chasing vehicle to aim at a position slightly on the left of the expected position of the runaway car. 
 
 > target_x = ukf.x_(0) +  dt * cos(dpsi * ukf.x_(3));
+
 > target_y = ukf.x_(1) +  dt * sin(dpsi * ukf.x_(3));
 
 As the chasing vehicle turns tigther, its trajctory will turn left of the runaway car and cross into its path. 
